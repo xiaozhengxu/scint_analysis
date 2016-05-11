@@ -5,10 +5,10 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 from astropy.time import Time
 
-
+'''
 i = 13
-j = 14
-text_name = 'scan02.txt'
+j = 15
+text_name = 'all20.txt'
 with open(text_name, 'r') as f:
 	text = f.read()
 	text_lines = text.split('\n')
@@ -30,6 +30,7 @@ fn1 = '/cita/h/home-2/xzxu/trails/data/ek036a_ef_no00{}.m5a'.format(scan_no1)
 fn2 = '/cita/h/home-2/xzxu/trails/data/ek036a_ef_no00{}.m5a'.format(scan_no2)
 t_gp1 = Time(t1)
 t_gp2 = Time(t2)
+'''
 
 size = 2 ** 22
 sample_rate = 32 * u.MHz
@@ -151,7 +152,8 @@ class GP_data(object):
 		
 		#plots the dynamic spectrum de-dispersed: 
 		plt.figure()
-		plt.imshow(self.output, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49))
+		#plt.imshow(self.output, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49))
+		plt.imshow(self.output, aspect='auto',extent=(0,8192,1610.49+16*8,1610.49))
 		plt.xlabel('time (ms)')
 		plt.ylabel('frequency (MHz)')
 		plt.title('dynamic spectrum of de-dispersed giant pulse')
@@ -159,10 +161,22 @@ class GP_data(object):
 
 		#plots the dynamic specturm dispersed as separate subplots for each chanel:
 		self.dchan_1 = np.fft.rfft(self.d_dispersed.reshape(-1, 2*nchan, 16), axis=1) # the dispersed spectrum
+		self.dR1 = np.concatenate((self.dchan_1[:,::-1,8], self.dchan_1[...,0], self.dchan_1[:,::-1,10], self.dchan_1[...,2], self.dchan_1[:,::-1,12], self.dchan_1[...,4], self.dchan_1[:,::-1,14], self.dchan_1[...,6]), axis=1)
+		self.dL1 = np.concatenate((self.dchan_1[:,::-1,9], self.dchan_1[...,1], self.dchan_1[:,::-1,11], self.dchan_1[...,3], self.dchan_1[:,::-1,13], self.dchan_1[...,5], self.dchan_1[:,::-1,15], self.dchan_1[...,7]), axis=1)
+		self.output1 = (abs(self.dR1)**2 + abs(self.dL1)**2).T
+		plt.figure()
+		#plt.imshow(self.output, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49)) #actual times and frequencies
+		plt.imshow(self.output1, aspect='auto',extent=(0,8192,1610.49+16*8,1610.49))# matrix value times
+		plt.xlabel('time (ms)')
+		plt.ylabel('frequency (MHz)')
+		plt.title('dynamic spectrum of dispersed giant pulse')
+		plt.colorbar()
+		
 		f, axarr = plt.subplots(8, 2)
 		for i in range(16):
 			axarr[i%8,i/8].imshow((abs(self.dchan_1[...,i])**2).T,aspect = 'auto')
 			axarr[i%8,i/8].set_title('chanel {}'.format(i))
+		axarr[i%8,i/8].set_title('dispersed pulse in its 16 channels')
 		
 		#plots the signal vs noise
 		plt.figure() 
@@ -176,7 +190,7 @@ class GP_data(object):
 if __name__ == "__main__":
 	gp1 = GP_data(fn1,t_gp1)
 	gp2 = GP_data(fn2,t_gp2)
-	#gp2.plot_figs()    
+	gp2.plot_figs()    
   	c = get_correlation_coefficients(gp1,gp2)
   	dt = t_gp2-t_gp1
   	dts = dt.sec 
