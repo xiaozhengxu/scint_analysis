@@ -10,7 +10,7 @@ from pickle import dump, load
 from os.path import exists 
 from GPbaseband import *
 
-text_name = 'all10.txt'
+text_name = 'all20.txt'
 with open(text_name, 'r') as f:
 	text = f.read()
 	text_lines = text.split('\n')
@@ -19,14 +19,14 @@ print len(text_lines)
 
 
 if exists('./figures/correlation_coeff/tvalues.txt'):
-	f=open('./figures/correlation_coeff/tvalues.txt','r') 
+	f=open('./figures/correlation_coeff/tvalues1.txt','r') 
 	tvalues=load(f)
 	print len(tvalues)
 	f.close()
 else:
 	tvalues = []
-if exists('./figures/correlation_coeff/cvalues.txt'):
-	f=open('./figures/correlation_coeff/cvalues.txt','r') 
+if exists('./figures/correlation_coeff/cvalues1.txt'):
+	f=open('./figures/correlation_coeff/cvalues1.txt','r') 
 	cvalues=load(f)
 	print len(cvalues)
 	f.close()
@@ -36,7 +36,7 @@ else:
 def calculate_values(order):
 	with open('./figures/correlation_coeff/datalog{}.txt'.format(order), 'w') as f1:
 		f1.seek(0,2) #2 means end of file, 0 is the off_set
-		for delta in [3,4]:	
+		for delta in [1,2,3]:	
 			for i in range(0,len(text_lines)-delta-1):
 			#for i in [25]:
 				j = i+delta	
@@ -59,7 +59,7 @@ def calculate_values(order):
 				t_gp1 = Time(t1)
 				t_gp2 = Time(t2)
 				dt = t_gp2-t_gp1
-				if abs(dt.sec)<100 and abs(dt.sec)>5e-6:
+				if abs(dt.sec)<500 and abs(dt.sec)>5e-5:
 					try:	
 						gp1 = GP_data(fn1,t_gp1)
 						gp2 = GP_data(fn2,t_gp2)
@@ -76,14 +76,15 @@ def calculate_values(order):
 						print 'Assertion error:',scan_no1,t1,scan_no2,t2
 						continue
 				
-	f=open('./figures/correlation_coeff/tvalues.txt','w')
+	f=open('./figures/correlation_coeff/tvalues1.txt','w')
 	dump(tvalues,f)
 	f.close()
-	f=open('./figures/correlation_coeff/cvalues.txt','w')
+	f=open('./figures/correlation_coeff/cvalues1.txt','w')
 	dump(cvalues,f)
 	f.close()
 
-#calculate_values(2)
+#calculate_values(int(text_name[5])) #for reading scan_.txt files
+calculate_values(4)
 
 plt.figure()
 plt.semilogx(tvalues,cvalues,'bo')

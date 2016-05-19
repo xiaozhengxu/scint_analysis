@@ -15,7 +15,7 @@ dt1 = 1/sample_rate
 thread_ids = [0, 4, 1, 5, 2, 6, 3, 7, 8, 12, 9, 13, 10, 14, 11, 15]
 fedge = 1610.49 * u.MHz + ((np.linspace(0,15,16) % 8) // 2) * 32. * u.MHz
 fref = fedge.mean() + sample_rate / 4
-nchan = 256
+nchan = 64
 # October DM from JB ephemeris (1e-2 is by eye correction)
 dm = (56.7957 + 1e-2) * u.pc / u.cm**3
 
@@ -63,25 +63,40 @@ def get_SN(outputsumfreq):
 	sigs_noise = (outputsumfreq-noise_mean)/noise_std
 	return sigs_noise
 
-def get_correlation_coefficients(gp1,gp2):
+def correlate(X,Y):
+	'''My function to find the correlation coefficient, to test np.corrcoef. results are the same.'''
+	meanx = np.mean(X)
+	meany = np.mean(Y)
+	numerator = np.sum((X - meanx)*(Y-meany))
+	denominator = np.sqrt(np.sum((X-meanx)**2))*np.sqrt(np.sum((Y-meany)**2))
+	return numerator/denominator
+
+def get_correlation_coefficients(fs1,fs2):
+	'''function to find the averaged correlation coefficient of the 8 frequency bands.'''
 	coefficients= []
 	for i in range(8):
-		X = gp1.freq_specs[i]
-		Y = gp2.freq_specs[i]
+		X = fs1[i]
+		Y = fs2[i]
 		coefficient = np.corrcoef(X, Y)[0,1] # np.corrcoef returns a matrix [1, coeff;coeff,1]
+		#meanx = np.mean(X)
+		#meany = np.mean(Y)
+		#numerator = np.sum((X - meanx)*(Y - meany))
+		#numerator = np.sum(np.sqrt(abs(X*Y))*np.sign(X*Y))
+		#numerator = np.sum(X*Y)
+		#denominator = gp1.sigma*gp2.sigma
+		#coefficient = numerator/denominator 
 		coefficients.append(coefficient) 
 	return np.mean(coefficients),coefficients
-
-def get_correlation_coefficient(gp1,gp2):
-	return np.corrcoef(gp1.freq_spec,gp2.freq_spec)[0,1]
-
+	
 def overlap_freq_spec(gp1,gp2):
 	f, axarr = plt.subplots(8, 1)
-	frequency_interval = 2056/8
+	frequency_interval = nchan+1
 	for i in range(8):
 		freqs = np.linspace((i)*16,(i+1)*16,frequency_interval)+1610.49 #actual frequencies 
-		axarr[i].plot(freqs,gp1.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
-		axarr[i].plot(freqs,gp2.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
+		#axarr[i].plot(freqs,gp1.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
+		#axarr[i].plot(freqs,gp2.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
+		axarr[i].plot(gp2.freq_specs[i])
+		axarr[i].plot(gp1.freq_specs[i])
 		if i%2==0:
 			axarr[i].set_ylabel('Intensity of peak with that frequency') 
 	axarr[i].set_xlabel('frequency (MHz)')
@@ -127,25 +142,35 @@ class GP_data(object):
 	def process_output(self):
 		self.outputsumfreq = self.output.sum(0) #a (8192,) matrix of the sum over all frequencies at given times
 		self.outputsumfreq1 = self.output1.sum(0)
-		peak_time = np.argmax(self.outputsumfreq) 
-		#a matrix containing only the pulse at pulse time bin and 3990
-		self.output_pulse = self.output[:,peak_time:peak_time+1]    
-		self.freq_spec = self.output_pulse.sum(1) 
-		self.freq_specs = []
-		for i in range(8):
-			self.freq_specs.append(self.freq_spec[18+i*220+i*36:18+(i+1)*220+i*36]) #the values 220 and 36 cuts the beginning and end of each frequency band
-		#computes signal to noise after summing all the frequencies
 		self.sigs_noise = get_SN(self.outputsumfreq)
 		self.sigs_noise1 = get_SN(self.outputsumfreq1)
 		self.S_N = max(self.sigs_noise)
-
+		print self.S_N
+		self.background_freq = self.output[:,2500:3500]
+		self.background_freq = self.background_freq.mean(1)
+		
+		self.peak_times = np.where(self.sigs_noise>self.S_N/15.)
+		self.peak_time = np.argmax(self.sigs_noise) 
+		self.b = np.where(self.peak_times[0] == self.peak_time)[0][0]
+		self.bin1 = self.output[:,self.peak_times[0][:self.b+1]].mean(1)
+		self.bin2 = self.output[:,self.peak_times[0][self.b+1:]].mean(1)
+		#self.sigma = np.std((self.bin1-np.mean(self.bin1)-self.background_freq)*(self.bin2-np.mean(self.bin2)-self.background_freq))
+		#self.sigma = np.sqrt(self.sigma)  
+		#self.output_pulse = np.vstack((self.bin1,self.bin2))
+		self.output_pulse = self.output[:,self.peak_time:self.peak_time+2]    
+		self.freq_spec1 = self.output_pulse.mean(1)-self.background_freq
+		
+		self.freq_spec = (self.bin1-np.mean(self.bin1)-self.background_freq)*(self.bin2-np.mean(self.bin2)-self.background_freq)
+		self.freq_specs = []
+		for i in range(8):
+			self.freq_specs.append(self.freq_spec[nchan/16+i*nchan*7/8+i*nchan/8:nchan/16+(i+1)*nchan*7/8+i*nchan/8]) #the values 220 and 36 cuts the beginning and end of each frequency band
+		#computes signal to noise after summing all the frequencies
 		
 	def plot_figs(self):
-		
 		#plots the frequency spectrum: 
 		plt.close('all')
 		f, axarr = plt.subplots(8, 1)
-		frequency_interval = 2056/8
+		frequency_interval = nchan+1
 		for i in range(8):
 			freqs = np.linspace((i)*16,(i+1)*16,frequency_interval)+1610.49 #actual frequencies 
 			#freqs = np.linspace((i)*frequency_interval,(i+1)*frequency_interval,frequency_interval)
@@ -157,7 +182,8 @@ class GP_data(object):
 		
 		#plots the dynamic spectrum de-dispersed: 
 		plt.figure()
-		plt.imshow(self.output, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49))
+		#plt.imshow(self.output, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49))
+		plt.imshow(self.output, aspect='auto')
 		plt.xlabel('time (ms)')
 		plt.ylabel('frequency (MHz)')
 		plt.title('dynamic spectrum of de-dispersed giant pulse around '+self.t_gp.value)
@@ -165,7 +191,8 @@ class GP_data(object):
 
 		#plots the dynamic specturm dispersed as a single stiched plot:
 		plt.figure()
-		plt.imshow(self.output1, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49))#actual times and frequencies
+		#plt.imshow(self.output1, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49))#actual times and frequencies
+		plt.imshow(self.output1, aspect='auto')
 		plt.title('dynamic spectrum of dispersed giant pulse around '+self.t_gp.value+'separated') 
 		plt.xlabel('time (ms)')
 		plt.ylabel('frequency (MHz)')
@@ -187,18 +214,28 @@ class GP_data(object):
 		plt.title('Signal to noise of de-dispersed pulse around '+self.t_gp.value)
 		
 		#plots the signal vs noise of dispersed - looks like noise, so won't plot
-		#'''
+		'''
 		plt.figure() 
 		plt.plot(self.sigs_noise1)
 		plt.xlabel('time ($16 \mu s$)')
 		plt.ylabel('S/N')
 		plt.title('Signal to noise of dispersed pulse around '+self.t_gp.value)
 		plt.show()
-   		
+   		'''
+   	def plot_fs(self):
+   		'''plots the frequency spectrum as a single plot'''
+		f, axarr = plt.subplots(2, 1)
+		axarr[0].plot(self.freq_spec) 
+		axarr[0].set_xlabel('frequency')
+		axarr[0].set_ylabel('Auto correlated frequency spectrum')
+		axarr[1].plot(self.freq_spec1)
+		axarr[1].set_ylabel('Peak frequency spectrum')
+		axarr[1].set_xlabel('frequency') 
+		plt.show()
 if __name__ == "__main__":
-	i = 1
-	j = 2
-	text_name = 'all30.txt'
+	i = 3
+	j = 4
+	text_name = 'all20.txt'
 	with open(text_name, 'r') as f:
 		text = f.read()
 		text_lines = text.split('\n')
@@ -216,17 +253,19 @@ if __name__ == "__main__":
 		t2 = strings2[0]
 	print scan_no1,t1,scan_no2,t2
 
-	fn1 = '/cita/h/home-2/xzxu/trails/data/ek036a_ef_no00{}.m5a'.format(scan_no1)
-	fn2 = '/cita/h/home-2/xzxu/trails/data/ek036a_ef_no00{}.m5a'.format(scan_no2)
+	fn1 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no1)
+	fn2 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no2)
+	#fn2 = '/cita/h/home-2/xzxu/trails/data/jb/ek036a_jb_no00{}.m5a'.format(scan_no1)
 	t_gp1 = Time(t1)
 	t_gp2 = Time(t2)
 	
 	gp1 = GP_data(fn1,t_gp1)
 	gp2 = GP_data(fn2,t_gp2)
-	gp1.plot_figs() 
+	gp2.plot_fs() 
+	#gp2.plot_figs()
 	overlap_freq_spec(gp1,gp2)   
   	
-  	c = get_correlation_coefficients(gp1,gp2) # This average one is better, as the one below takes into account non-data information, so returns a higher correlation coefficient
+  	c = get_correlation_coefficients(gp1.freq_specs,gp2.freq_specs) # This average one is better, as the one below takes into account non-data information, so returns a higher correlation coefficient
   	#c1 = get_correlation_coefficient(gp1,gp2)
   	dt = t_gp2-t_gp1
   	dts = dt.sec 
