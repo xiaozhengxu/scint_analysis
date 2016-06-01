@@ -4,7 +4,7 @@ from scipy.stats.stats import pearsonr
 import astropy.units as u
 import matplotlib.pyplot as plt
 from astropy.time import Time
-
+import time
 '''
 '''
 
@@ -15,7 +15,7 @@ dt1 = 1/sample_rate
 thread_ids = [0, 4, 1, 5, 2, 6, 3, 7, 8, 12, 9, 13, 10, 14, 11, 15]
 fedge = 1610.49 * u.MHz + ((np.linspace(0,15,16) % 8) // 2) * 32. * u.MHz
 fref = fedge.mean() + sample_rate / 4
-nchan = 64
+nchan = 32
 # October DM from JB ephemeris (1e-2 is by eye correction)
 dm = (56.7957 + 1e-2) * u.pc / u.cm**3
 
@@ -88,21 +88,58 @@ def get_correlation_coefficients(fs1,fs2):
 		coefficients.append(coefficient) 
 	return np.mean(coefficients),coefficients
 	
-def overlap_freq_spec(gp1,gp2):
+def overlap_freq_specs(gp1,gp2):
 	f, axarr = plt.subplots(8, 1)
 	frequency_interval = nchan+1
 	for i in range(8):
 		freqs = np.linspace((i)*16,(i+1)*16,frequency_interval)+1610.49 #actual frequencies 
 		#axarr[i].plot(freqs,gp1.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
 		#axarr[i].plot(freqs,gp2.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
-		axarr[i].plot(gp2.freq_specs[i])
-		axarr[i].plot(gp1.freq_specs[i])
-		if i%2==0:
+		axarr[i].plot(gp1.freq_specs1[i])
+		axarr[i].plot(gp2.freq_specs1[i])
+		axarr[i].axhline(0,color = 'black')
+		axarr[i].axhline(gp1.freq_specs1[i].mean(),color = 'blue')
+		axarr[i].axhline(gp2.freq_specs1[i].mean(),color = 'green')
+		if i==4:
 			axarr[i].set_ylabel('Intensity of peak with that frequency') 
 	axarr[i].set_xlabel('frequency (MHz)')
 	axarr[0].set_title('Frequency spectrum of giant pulses at around '+gp1.t_gp.value+' and '+gp2.t_gp.value)
 	plt.show()
 
+def overlap_freq_spec(gp1,gp2):
+	freq1 = np.append(gp1.freq_specs1[0],gp1.freq_specs1[1])
+	freq2 = np.append(gp2.freq_specs1[0],gp2.freq_specs1[1])
+	for i in range(6):
+		freq1 = np.append(freq1,gp1.freq_specs1[i+2])
+		freq2 = np.append(freq2,gp2.freq_specs1[i+2])
+	plt.figure()
+	plt.plot(freq1/freq1.mean()-1)
+	plt.plot(freq2/freq2.mean()-1)
+	plt.axhline(0,color = 'black')
+	#plt.axhline(gp1.freq_specs1[i].mean(),color = 'blue')
+	#plt.axhline(gp2.freq_specs1[i].mean(),color = 'green')
+	plt.xlabel('frequency channel')
+	plt.ylabel('Intensity')
+	plt.title('Frequency spectrum of giant pulses (c ={},dt = {}s) at\n '.format(round(c[0],2),round(dts,3))+gp1.t_gp.value+' and '+gp2.t_gp.value)
+	plt.show()
+
+def check_single_pulse_freq(array1,array2):
+	coeff1 = np.corrcoef(array1,array2)[0,1]
+	coeff2 = np.corrcoef(array1*array2,(array1+array2)/2)[0,1]
+	f,(ax1,ax2) = plt.subplots(2,sharex = True,sharey = True)
+	ax1.plot(array1/array1.mean()-1,label = 'bin1')
+	ax1.plot(array2/array2.mean()-1,label = 'bin2')
+	ax1.legend()
+	ax1.set_ylabel('Intensity in units of mean')
+	ax2.plot((array1*array2)/(array1*array2).mean()-1,label = 'bin1*bin2')
+	ax2.plot(((array1+array2)/2)/((array1+array2)/2).mean()-1,label = '(bin1+bin2)/2')
+	plt.legend()
+	plt.xlabel('frequency channel')
+	plt.ylabel('Intensity in units of mean')
+	plt.title('Comparing bin1 and bin2 of giant pulse. bin 1 and bin2 correlates by {},\n bin sum and product correlate by {}'.format(round(coeff1,2),round(coeff2,2))) 
+	plt.show()
+ 
+	
 class GP_data(object):
 	def __init__(self,fn,t_gp):
 		self.t_gp = t_gp
@@ -113,7 +150,11 @@ class GP_data(object):
 		fh.seek(int(offset_gp) - size // 2)
 		self.d_dispersed = fh.read(size)
 		
+		
+		#start_time = time.time()
+		#print start_time
 		self.process_data()
+		#print time.time()-start_time
 		self.process_output()
 		
 	def process_data(self):
@@ -127,7 +168,7 @@ class GP_data(object):
 		self.d_dedispersed = np.fft.irfft(ft, axis=0)
 
 		# Channelize the data
-		self.dchan = np.fft.rfft(self.d_dedispersed.reshape(-1, 2*nchan, 16), axis=1) #axis 1 means across the 257 values in each time bin? 
+		self.dchan = np.fft.rfft(self.d_dedispersed.reshape(-1, 2*nchan, 16), axis=1) #axis 1 means across the nchan+1 values in each time bin
 		# Horribly inelegant, but works for now. 
 		# Channels are not in order, and polarizations are separate
 		self.dR = np.concatenate((self.dchan[:,::-1,8], self.dchan[...,0], self.dchan[:,::-1,10], self.dchan[...,2], self.dchan[:,::-1,12], self.dchan[...,4], self.dchan[:,::-1,14], self.dchan[...,6]), axis=1)
@@ -140,32 +181,42 @@ class GP_data(object):
 		self.output1 = (abs(self.dR1)**2 + abs(self.dL1)**2).T
 		
 	def process_output(self):
-		self.outputsumfreq = self.output.sum(0) #a (8192,) matrix of the sum over all frequencies at given times
-		self.outputsumfreq1 = self.output1.sum(0)
+		self.outputsumfreq = self.output.sum(0) #dedispersed
+		self.outputsumfreq1 = self.output1.sum(0) #dispersed
+		#computes signal to noise after summing all the frequencies
 		self.sigs_noise = get_SN(self.outputsumfreq)
 		self.sigs_noise1 = get_SN(self.outputsumfreq1)
 		self.S_N = max(self.sigs_noise)
 		print self.S_N
-		self.background_freq = self.output[:,2500:3500]
-		self.background_freq = self.background_freq.mean(1)
+		self.background_freq = self.output[:,2500:3500].mean(1)
 		
-		self.peak_times = np.where(self.sigs_noise>self.S_N/15.)
+		#self.peak_times = np.where(self.sigs_noise>self.S_N/15.)
 		self.peak_time = np.argmax(self.sigs_noise) 
-		self.b = np.where(self.peak_times[0] == self.peak_time)[0][0]
-		self.bin1 = self.output[:,self.peak_times[0][:self.b+1]].mean(1)
-		self.bin2 = self.output[:,self.peak_times[0][self.b+1:]].mean(1)
+		self.bin1 = self.output[:,self.peak_time-1:self.peak_time+1].mean(1)
+		self.bin2 = self.output[:,self.peak_time+1:self.peak_time+3].mean(1)
 		#self.sigma = np.std((self.bin1-np.mean(self.bin1)-self.background_freq)*(self.bin2-np.mean(self.bin2)-self.background_freq))
 		#self.sigma = np.sqrt(self.sigma)  
 		#self.output_pulse = np.vstack((self.bin1,self.bin2))
-		self.output_pulse = self.output[:,self.peak_time:self.peak_time+2]    
-		self.freq_spec1 = self.output_pulse.mean(1)-self.background_freq
+		self.output_pulse = self.output[:,self.peak_time-1:self.peak_time+3].mean(1)    
+		self.freq_spec3 = self.output_pulse/self.background_freq
 		
-		self.freq_spec = (self.bin1-np.mean(self.bin1)-self.background_freq)*(self.bin2-np.mean(self.bin2)-self.background_freq)
-		self.freq_specs = []
+		self.freq_spec2 = ((self.bin1-np.mean(self.bin1))/self.background_freq)*((self.bin2-np.mean(self.bin2))/self.background_freq)
+		self.freq_spec1 = (self.bin1/self.background_freq)*(self.bin2/self.background_freq)
+		self.freq_specs1 = []
 		for i in range(8):
-			self.freq_specs.append(self.freq_spec[nchan/16+i*nchan*7/8+i*nchan/8:nchan/16+(i+1)*nchan*7/8+i*nchan/8]) #the values 220 and 36 cuts the beginning and end of each frequency band
-		#computes signal to noise after summing all the frequencies
+			self.freq_specs1.append(self.freq_spec1[nchan/16+i*nchan*7/8+i*(nchan/8+1):nchan/16+(i+1)*nchan*7/8+i*(nchan/8+1)]) #this slice cuts the beginning and end of each frequency band
+			#self.freq_specs1[i] = self.freq_specs1[i]-self.freq_specs1[i].mean() #subtracts the mean first for each band		
 		
+		#freq_spec without auto correlation
+		self.freq_specs2 = []
+		for i in range(8):
+			self.freq_specs2.append(self.freq_spec2[nchan/16+i*nchan*7/8+i*(nchan/8+1):nchan/16+(i+1)*nchan*7/8+i*(nchan/8+1)]) #this slice cuts the beginning and end of each frequency band
+			self.freq_specs2[i] = self.freq_specs2[i]-self.freq_specs2[i].mean() #subtracts the mean first for each band
+		self.freq_specs3 = []
+		for i in range(8):
+			self.freq_specs3.append(self.freq_spec3[nchan/16+i*nchan*7/8+i*(nchan/8+1):nchan/16+(i+1)*nchan*7/8+i*(nchan/8+1)]) #this slice cuts the beginning and end of each frequency band
+			#self.freq_specs3[i] = self.freq_specs3[i]-self.freq_specs3[i].mean()
+	
 	def plot_figs(self):
 		#plots the frequency spectrum: 
 		plt.close('all')
@@ -174,7 +225,7 @@ class GP_data(object):
 		for i in range(8):
 			freqs = np.linspace((i)*16,(i+1)*16,frequency_interval)+1610.49 #actual frequencies 
 			#freqs = np.linspace((i)*frequency_interval,(i+1)*frequency_interval,frequency_interval)
-			axarr[i].plot(freqs,self.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
+			axarr[i].plot(freqs,self.freq_spec1[i*frequency_interval:(i+1)*frequency_interval])
 			if i%2==0:
 				axarr[i].set_ylabel('Intensity of peak with that frequency') 
 		axarr[i].set_xlabel('frequency (MHz)')
@@ -213,6 +264,7 @@ class GP_data(object):
 		plt.ylabel('S/N')
 		plt.title('Signal to noise of de-dispersed pulse around '+self.t_gp.value)
 		
+		plt.show()
 		#plots the signal vs noise of dispersed - looks like noise, so won't plot
 		'''
 		plt.figure() 
@@ -222,20 +274,20 @@ class GP_data(object):
 		plt.title('Signal to noise of dispersed pulse around '+self.t_gp.value)
 		plt.show()
    		'''
-   	def plot_fs(self):
-   		'''plots the frequency spectrum as a single plot'''
+	def plot_fs(self):
+		'''plots the frequency spectrum as a single plot'''
 		f, axarr = plt.subplots(2, 1)
-		axarr[0].plot(self.freq_spec) 
+		axarr[0].plot(self.freq_spec1) 
 		axarr[0].set_xlabel('frequency')
 		axarr[0].set_ylabel('Auto correlated frequency spectrum')
-		axarr[1].plot(self.freq_spec1)
+		axarr[1].plot(self.freq_spec3)
 		axarr[1].set_ylabel('Peak frequency spectrum')
 		axarr[1].set_xlabel('frequency') 
 		plt.show()
 if __name__ == "__main__":
-	i = 3
-	j = 4
-	text_name = 'all20.txt'
+	i = 23
+	j = 2
+	text_name = 'all30.txt'
 	with open(text_name, 'r') as f:
 		text = f.read()
 		text_lines = text.split('\n')
@@ -256,19 +308,26 @@ if __name__ == "__main__":
 	fn1 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no1)
 	fn2 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no2)
 	#fn2 = '/cita/h/home-2/xzxu/trails/data/jb/ek036a_jb_no00{}.m5a'.format(scan_no1)
+	
+	# if using homard instead of lobster:
+	#fn1 = '/home/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no1)
+	#fn2 = '/home/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no2)
+	
 	t_gp1 = Time(t1)
 	t_gp2 = Time(t2)
 	
 	gp1 = GP_data(fn1,t_gp1)
+	#check_single_pulse_freq(gp1.bin1,gp1.bin2)
+	
 	gp2 = GP_data(fn2,t_gp2)
-	gp2.plot_fs() 
-	#gp2.plot_figs()
-	overlap_freq_spec(gp1,gp2)   
+	#gp2.plot_fs() 
+	#gp2.plot_figs()   
   	
-  	c = get_correlation_coefficients(gp1.freq_specs,gp2.freq_specs) # This average one is better, as the one below takes into account non-data information, so returns a higher correlation coefficient
+  	c = get_correlation_coefficients(gp1.freq_specs1,gp2.freq_specs1) # This average one is better, as the one below takes into account non-data information, so returns a higher correlation coefficient
   	#c1 = get_correlation_coefficient(gp1,gp2)
   	dt = t_gp2-t_gp1
   	dts = dt.sec 
+  	overlap_freq_spec(gp1,gp2)
   	print 'The correlation coefficient is {}, the time lag between the two pulses is {} seconds.'.format(c[0],dts)
 	
     
