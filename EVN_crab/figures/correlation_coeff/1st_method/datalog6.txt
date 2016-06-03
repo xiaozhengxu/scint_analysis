@@ -1,0 +1,4 @@
+scan06:2015-10-18T23:54:00.764288,scan06:2015-10-18T23:53:54.965946
+The correlation coefficient is 0.112289871211, the time lag between the two pulses is -5.79834200001 seconds.
+scan06:2015-10-18T23:54:00.764286,scan06:2015-10-18T23:53:54.965946
+The correlation coefficient is 0.124629754643, the time lag between the two pulses is -5.79834000001 seconds.

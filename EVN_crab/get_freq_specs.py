@@ -10,7 +10,7 @@ from pickle import dump, load
 from os.path import exists 
 from GPbaseband import *
 
-text_name = 'allGPs.txt'
+text_name = 'all7_sorted1.txt'
 with open(text_name, 'r') as f:
 	text = f.read()
 	text_lines = text.split('\n')
@@ -19,9 +19,9 @@ print len(text_lines)
 
 #nchan = 128
 
-if exists('./figures/correlation_coeff/{}_{}m_may31.npz'.format(text_name,nchan)):
+if exists('./figures/correlation_coeff/{}_{}m_jun1.npz'.format(text_name,nchan)):
 	#f=open('./figures/correlation_coeff/{}m.npz'.format(text_name),'r') 
-	npzfile=np.load('./figures/correlation_coeff/{}_{}m_may31.npz'.format(text_name,nchan))
+	npzfile=np.load('./figures/correlation_coeff/{}_{}m_jun1.npz'.format(text_name,nchan))
 	freq_values3 = npzfile['freq_values3']
 	freq_values2 = npzfile['freq_values2']
 	freq_values1 = npzfile['freq_values1']
@@ -33,11 +33,11 @@ else:
 	freq_values2 = np.zeros(shape = (0,8,nchan*7/8))
 	freq_values3 = np.zeros(shape = (0,8,nchan*7/8))
 	time_values = np.zeros(0)
-	for i,text in enumerate(text_lines[:-2]):
+	for i,text in enumerate(text_lines[:-1]):
 		strings1 = text.split()
 		if text_name[0] == 'a': # get information from a all__.txt file
-			scan_no = strings1[1]
-			t = strings1[2]
+			scan_no = strings1[0]
+			t = strings1[1]
 		elif text_name[0] == 's': # get information from a scan__.txt file
 			scan_no = text_name[4:6]
 			t = strings1[0]
@@ -53,14 +53,14 @@ else:
 		except AssertionError:
 			print 'Assertion error:',scan_no,t
 			continue
-	np.savez('./figures/correlation_coeff/{}_{}m_may31.npz'.format(text_name,nchan),freq_values1 = freq_values1, time_values = time_values, freq_values2=freq_values2, freq_values3 = freq_values3)
+	np.savez('./figures/correlation_coeff/{}_{}m_jun1.npz'.format(text_name,nchan),freq_values1 = freq_values1, time_values = time_values, freq_values2=freq_values2, freq_values3 = freq_values3)
 	
 	
 	
 def calculate_values():
 	ctvalues = np.zeros(shape = (freq_values1.shape[0],freq_values1.shape[0],4)) #matrix
-	if exists('./figures/correlation_coeff/{}_{}ctvalues_may31.npy'.format(text_name,nchan)):
-		ctvalues = np.load('./figures/correlation_coeff/{}_{}ctvalues_may31.npy'.format(text_name,nchan))
+	if exists('./figures/correlation_coeff/{}_{}ctvalues_jun1.npy'.format(text_name,nchan)):
+		ctvalues = np.load('./figures/correlation_coeff/{}_{}ctvalues_jun1.npy'.format(text_name,nchan))
 	else:
 		ctvalues = np.zeros(shape = (0,4)) 
 		for i in range(freq_values1.shape[0]):
@@ -76,8 +76,8 @@ def calculate_values():
 					ctvalues = np.append(ctvalues,np.array([[c1,c2,c3,abs(dt.sec)]]),axis = 0)
 					#print 'i= ',i,'j= ',j
 					print ctvalues.shape
-		np.save('./figures/correlation_coeff/{}_{}ctvalues_may31.npy'.format(text_name,nchan),ctvalues)
-	
+		np.save('./figures/correlation_coeff/{}_{}ctvalues_jun1.npy'.format(text_name,nchan),ctvalues)
+	'''
 	plt.figure()
 	plt.semilogx(ctvalues[:,3],ctvalues[:,0],'bo')
 	plt.xlabel('time lag (seconds)')
@@ -89,9 +89,12 @@ def calculate_values():
 	plt.xlabel('time lag (seconds)')
 	plt.ylabel('Correlation Coefficient')
 	plt.title('{} frequency channels, correlating autocorrelation within single pulses,\n subtracting mean of bin 1 and bin2 before multiplying'.format(nchan)) 
+	'''
+	ctvalues3 = ctvalues[:,2]
 	
 	plt.figure()
-	plt.semilogx(ctvalues[:,3],ctvalues[:,2],'bo')
+	plt.semilogx(ctvalues[:,3],ctvalues[:,2],'x')
+	#plt.plot(ctvalues[:,3],ctvalues[:,2],'x')
 	plt.xlabel('time lag (seconds)')
 	plt.ylabel('Correlation Coefficient')
 	plt.title('{} frequency channels, correlating original peaks \n without autocorrelation within single pulse'.format(nchan)) 

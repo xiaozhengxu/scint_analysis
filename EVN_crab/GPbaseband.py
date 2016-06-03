@@ -5,6 +5,8 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 from astropy.time import Time
 import time
+from pulsar.predictor import Polyco
+#from find_times import *
 '''
 '''
 
@@ -15,7 +17,7 @@ dt1 = 1/sample_rate
 thread_ids = [0, 4, 1, 5, 2, 6, 3, 7, 8, 12, 9, 13, 10, 14, 11, 15]
 fedge = 1610.49 * u.MHz + ((np.linspace(0,15,16) % 8) // 2) * 32. * u.MHz
 fref = fedge.mean() + sample_rate / 4
-nchan = 32
+nchan = 16
 # October DM from JB ephemeris (1e-2 is by eye correction)
 dm = (56.7957 + 1e-2) * u.pc / u.cm**3
 
@@ -88,39 +90,43 @@ def get_correlation_coefficients(fs1,fs2):
 		coefficients.append(coefficient) 
 	return np.mean(coefficients),coefficients
 	
-def overlap_freq_specs(gp1,gp2):
+def overlap_freq_specs(fs1,fs2):
 	f, axarr = plt.subplots(8, 1)
 	frequency_interval = nchan+1
 	for i in range(8):
-		freqs = np.linspace((i)*16,(i+1)*16,frequency_interval)+1610.49 #actual frequencies 
+		freqs = np.linspace(i*16+16.0/(nchan+1)*2,i*16+16.0/(nchan+1)*30,nchan/8*7)+1610.49 #actual frequencies 
 		#axarr[i].plot(freqs,gp1.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
 		#axarr[i].plot(freqs,gp2.freq_spec[i*frequency_interval:(i+1)*frequency_interval])
-		axarr[i].plot(gp1.freq_specs1[i])
-		axarr[i].plot(gp2.freq_specs1[i])
+		axarr[i].plot(freqs,fs1[i])
+		axarr[i].plot(freqs,fs2[i])
 		axarr[i].axhline(0,color = 'black')
-		axarr[i].axhline(gp1.freq_specs1[i].mean(),color = 'blue')
-		axarr[i].axhline(gp2.freq_specs1[i].mean(),color = 'green')
+		axarr[i].axhline(fs1[i].mean(),color = 'blue')
+		axarr[i].axhline(fs2[i].mean(),color = 'green')
 		if i==4:
 			axarr[i].set_ylabel('Intensity of peak with that frequency') 
 	axarr[i].set_xlabel('frequency (MHz)')
-	axarr[0].set_title('Frequency spectrum of giant pulses at around '+gp1.t_gp.value+' and '+gp2.t_gp.value)
+	axarr[0].set_title('Frequency spectrum of giant pulses (c ={},dt = {}s) with phases {} {} at\n '.format(round(c[0],4),dts,round(float(phase1),4),round(float(phase2),4))+gp1.t_gp.value+' and '+gp2.t_gp.value)
 	plt.show()
 
-def overlap_freq_spec(gp1,gp2):
-	freq1 = np.append(gp1.freq_specs1[0],gp1.freq_specs1[1])
-	freq2 = np.append(gp2.freq_specs1[0],gp2.freq_specs1[1])
+def overlap_freq_spec(fs1,fs2,normalized = True):
+	freq1 = np.append(fs1[0],fs1[1])
+	freq2 = np.append(fs2[0],fs2[1])
 	for i in range(6):
-		freq1 = np.append(freq1,gp1.freq_specs1[i+2])
-		freq2 = np.append(freq2,gp2.freq_specs1[i+2])
+		freq1 = np.append(freq1,fs1[i+2])
+		freq2 = np.append(freq2,fs2[i+2])
 	plt.figure()
-	plt.plot(freq1/freq1.mean()-1)
-	plt.plot(freq2/freq2.mean()-1)
+	if normalized:
+		plt.plot(freq1/freq1.mean()-1)
+		plt.plot(freq2/freq2.mean()-1)
+	else:
+		plt.plot(freq1)
+		plt.plot(freq2)
 	plt.axhline(0,color = 'black')
-	#plt.axhline(gp1.freq_specs1[i].mean(),color = 'blue')
-	#plt.axhline(gp2.freq_specs1[i].mean(),color = 'green')
+	#plt.axhline(fs1[i].mean(),color = 'blue')
+	#plt.axhline(fs2[i].mean(),color = 'green')
 	plt.xlabel('frequency channel')
 	plt.ylabel('Intensity')
-	plt.title('Frequency spectrum of giant pulses (c ={},dt = {}s) at\n '.format(round(c[0],2),round(dts,3))+gp1.t_gp.value+' and '+gp2.t_gp.value)
+	plt.title('Frequency spectrum of giant pulses (c ={},dt = {}s) with phases {} {} at\n '.format(round(c[0],4),dts,round(float(phase1),4),round(float(phase2),4))+gp1.t_gp.value+' and '+gp2.t_gp.value)
 	plt.show()
 
 def check_single_pulse_freq(array1,array2):
@@ -138,12 +144,18 @@ def check_single_pulse_freq(array1,array2):
 	plt.ylabel('Intensity in units of mean')
 	plt.title('Comparing bin1 and bin2 of giant pulse. bin 1 and bin2 correlates by {},\n bin sum and product correlate by {}'.format(round(coeff1,2),round(coeff2,2))) 
 	plt.show()
- 
+
+def find_phase(t_GP,scan_no):
+	t0 = Time(start_times[int(scan_no)-1])
+	psr_polyco = Polyco('./polyco_new.dat')
+	phase_pol = psr_polyco.phasepol(t0)
+	phase = np.remainder(phase_pol(t_GP.mjd), 1)
+	return phase
 	
 class GP_data(object):
 	def __init__(self,fn,t_gp):
 		self.t_gp = t_gp
-		fh = mark5b.open(fn, mode='rs', nchan=16,
+		fh = mark5b.open(fn1, mode='rs', nchan=16,
 					    sample_rate=sample_rate, thread_ids=thread_ids, ref_mjd=57000)
 		offset_gp = ((t_gp - fh.tell(unit='time')).to(u.s).value *
 					 fh.frames_per_second * fh.samples_per_frame)
@@ -285,12 +297,20 @@ class GP_data(object):
 		axarr[1].set_xlabel('frequency') 
 		plt.show()
 if __name__ == "__main__":
-	i = 23
-	j = 2
-	text_name = 'all30.txt'
+	'''
+	i = 171
+	j = 174
+	'''
+	text_name = 'close_pairs.txt'
+	
+	with open('starttimes.txt','r') as f:
+		start_times = f.read()
+		start_times = start_times.split('\n')[:-1]
+	
 	with open(text_name, 'r') as f:
 		text = f.read()
 		text_lines = text.split('\n')
+	'''
 	strings1 = text_lines[i-1].split()
 	strings2 = text_lines[j-1].split()
 	if text_name[0] == 'a': # get information from a all__.txt file
@@ -304,31 +324,45 @@ if __name__ == "__main__":
 		t1 = strings1[0]
 		t2 = strings2[0]
 	print scan_no1,t1,scan_no2,t2
+	'''
+	for i in range(1,11):
+		pair_no = i
+		close_GP_pairs = np.load('./figures/correlation_coeff/close_pairs.npy')
+		t1 = close_GP_pairs[pair_no-1,0]
+		t2 = close_GP_pairs[pair_no-1,1]
+		scan_no1 = close_GP_pairs[pair_no-1,2]
+		scan_no2 = close_GP_pairs[pair_no-1,3]
+		dts = close_GP_pairs[pair_no-1,4]
+	
+		phase1 = text_lines[pair_no-1].split()[5]
+		phase2 = text_lines[pair_no-1].split()[6]
+	
+		fn1 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no1)
+		fn2 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no2)
+		#fn2 = '/cita/h/home-2/xzxu/trails/data/jb/ek036a_jb_no00{}.m5a'.format(scan_no1)
+	
+		# if using homard instead of lobster:
+		#fn1 = '/home/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no1)
+		#fn2 = '/home/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no2)
+	
+		t_gp1 = Time(t1)
+		t_gp2 = Time(t2)
 
-	fn1 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no1)
-	fn2 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no2)
-	#fn2 = '/cita/h/home-2/xzxu/trails/data/jb/ek036a_jb_no00{}.m5a'.format(scan_no1)
 	
-	# if using homard instead of lobster:
-	#fn1 = '/home/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no1)
-	#fn2 = '/home/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no2)
-	
-	t_gp1 = Time(t1)
-	t_gp2 = Time(t2)
-	
-	gp1 = GP_data(fn1,t_gp1)
-	#check_single_pulse_freq(gp1.bin1,gp1.bin2)
-	
-	gp2 = GP_data(fn2,t_gp2)
-	#gp2.plot_fs() 
-	#gp2.plot_figs()   
-  	
-  	c = get_correlation_coefficients(gp1.freq_specs1,gp2.freq_specs1) # This average one is better, as the one below takes into account non-data information, so returns a higher correlation coefficient
-  	#c1 = get_correlation_coefficient(gp1,gp2)
-  	dt = t_gp2-t_gp1
-  	dts = dt.sec 
-  	overlap_freq_spec(gp1,gp2)
-  	print 'The correlation coefficient is {}, the time lag between the two pulses is {} seconds.'.format(c[0],dts)
+		print 'phase of gp1 is ',phase1,'phase of gp2 is ',phase2
+
+		#check_single_pulse_freq(gp1.bin1,gp1.bin2)
+		if True:
+			gp1 = GP_data(fn1,t_gp1)
+			gp2 = GP_data(fn2,t_gp2)
+		#gp2.plot_fs() 
+		#gp2.plot_figs()   
+
+		c = get_correlation_coefficients(gp1.freq_specs3,gp2.freq_specs3) 
+		#dt = t_gp2-t_gp1
+		#dts = dt.sec 
+		overlap_freq_spec(gp1.freq_specs3,gp2.freq_specs3,normalized = False)
+		print 'The correlation coefficient is {}, the time lag between the two pulses is {} seconds.'.format(c[0],dts)
 	
     
     

@@ -1,0 +1,12 @@
+scan03:2015-10-18T23:29:29.580030,scan03:2015-10-18T23:29:23.685330
+The correlation coefficient is 0.1320298318, the time lag between the two pulses is -5.89470000001 seconds.
+scan03:2015-10-18T23:29:29.580028,scan03:2015-10-18T23:29:23.685330
+The correlation coefficient is 0.108625841634, the time lag between the two pulses is -5.89469800001 seconds.
+scan03:2015-10-18T23:34:49.353038,scan03:2015-10-18T23:34:58.405466
+The correlation coefficient is 0.0731061635081, the time lag between the two pulses is 9.05242799999 seconds.
+scan03:2015-10-18T23:28:34.191718,scan03:2015-10-18T23:28:25.620216
+The correlation coefficient is 0.0936424295022, the time lag between the two pulses is -8.57150200001 seconds.
+scan03:2015-10-18T23:28:34.191714,scan03:2015-10-18T23:28:25.620216
+The correlation coefficient is 0.0882276835051, the time lag between the two pulses is -8.571498 seconds.
+scan03:2015-10-18T23:29:23.685330,scan03:2015-10-18T23:29:18.069362
+The correlation coefficient is 0.0885504015747, the time lag between the two pulses is -5.615968 seconds.
