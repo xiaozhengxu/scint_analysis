@@ -11,7 +11,7 @@ ctvalues = np.load('./figures/correlation_coeff/{}_{}ctvalues_jun1.npy'.format(t
 
 bin_no = 100
 time_values = ctvalues[:,3]
-c3values = ctvalues[:,2]
+c3values = ctvalues[:,0]
 bins = np.logspace(-1.3,2.5,bin_no)
 bin_means = np.histogram(time_values,bins,weights = c3values,density = False)[0]/np.histogram(time_values,bins,density = False)[0]
 

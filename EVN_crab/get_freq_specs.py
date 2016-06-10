@@ -56,9 +56,9 @@ else:
 	np.savez('./figures/correlation_coeff/{}_{}m_jun1.npz'.format(text_name,nchan),freq_values1 = freq_values1, time_values = time_values, freq_values2=freq_values2, freq_values3 = freq_values3)
 	
 	
-	
+
 def calculate_values():
-	ctvalues = np.zeros(shape = (freq_values1.shape[0],freq_values1.shape[0],4)) #matrix
+	#ctvalues = np.zeros(shape = (freq_values1.shape[0],freq_values1.shape[0],4)) #matrix
 	if exists('./figures/correlation_coeff/{}_{}ctvalues_jun1.npy'.format(text_name,nchan)):
 		ctvalues = np.load('./figures/correlation_coeff/{}_{}ctvalues_jun1.npy'.format(text_name,nchan))
 	else:
@@ -77,7 +77,33 @@ def calculate_values():
 					#print 'i= ',i,'j= ',j
 					print ctvalues.shape
 		np.save('./figures/correlation_coeff/{}_{}ctvalues_jun1.npy'.format(text_name,nchan),ctvalues)
-	'''
+	
+	ctvaluesMP2 = np.zeros(shape = (0,3))
+	ctvaluesIP2 = np.zeros(shape = (0,3))
+	ctvaluesMIP = np.zeros(shape = (0,3))
+	for i in range(freq_values1.shape[0]):
+		for j in range(freq_values1.shape[0] - i):
+			t_gp1 = Time(time_values[i])
+			t_gp2 = Time(time_values[i+j])
+			phase1 = float(text_lines[i].split()[3])
+			phase2 = float(text_lines[i+j].split()[3])
+			dt = t_gp2-t_gp1
+			if 300>abs(dt.sec)>1e-5:
+			#if abs(dt.sec)<10 and abs(dt.sec)>0.01:
+				c1 = get_correlation_coefficients(freq_values1[i,...],freq_values1[i+j,...])[0]
+				c3 = get_correlation_coefficients(freq_values3[i,...],freq_values3[i+j,...])[0]
+				if 0.03<phase1<0.1:
+				    if 0.03<phase2<0.1:
+				        ctvaluesMP2 = np.append(ctvaluesMP2,np.array([[c1,c3,abs(dt.sec)]]),axis = 0)
+				    elif 0.45<phase2<0.52:
+				        ctvaluesMIP = np.append(ctvaluesMIP,np.array([[c1,c3,abs(dt.sec)]]),axis = 0)
+				    else:
+				            
+				#print 'i= ',i,'j= ',j
+				print ctvalues.shape
+		np.save('./figures/correlation_coeff/{}_{}ctvalues_jun1.npy'.format(text_name,nchan),ctvalues)
+	
+	
 	plt.figure()
 	plt.semilogx(ctvalues[:,3],ctvalues[:,0],'bo')
 	plt.xlabel('time lag (seconds)')
@@ -100,6 +126,6 @@ def calculate_values():
 	plt.title('{} frequency channels, correlating original peaks \n without autocorrelation within single pulse'.format(nchan)) 
 	plt.show()
 	
-calculate_values()
+#calculate_values()
 
 
