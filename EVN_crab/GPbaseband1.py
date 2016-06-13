@@ -193,8 +193,8 @@ if __name__ == "__main__":
 		plt.savefig('./figures/current day plots/{}chan{}_{}s.png'.format(nchan,pairkind,dts))
 		plt.show()
 	
-	i = 1
-	j = 2
+	i = 6
+	j = 7
 	
 	gp_average = np.load('./figures/correlation_coeff/giant_pulses_average{}chan.npz'.format(nchan))
 	with np.load('./figures/correlation_coeff/giant_pulses{}chan.npz'.format(nchan)) as npzfile:
@@ -208,9 +208,21 @@ if __name__ == "__main__":
 		fs2 = freq_values[j]/gp_average-1
 		numerator = np.fft.rfft(fs1)*np.fft.rfft(fs2)
 		#denominator = 
-		
-		
-
+	
+	text_name = 'all7_sorted1.txt'	
+	with open(text_name, 'r') as f:
+		text = f.read()
+		text_lines = text.split('\n')
+	
+	strings1 = text_lines[i-1].split()
+	strings2 = text_lines[j-1].split()
+	if text_name[0] == 'a': # get information from a all__.txt file
+		scan_no1 = strings1[0]
+		scan_no2 = strings2[0]
+		t1 = strings1[1]
+		t2 = strings2[1]
+		phase1 = strings1[3]
+		phase2 = strings2[3]
 	fn1 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no1)
 	fn2 = '/cita/h/home-2/xzxu/trails/data/ef/ek036a_ef_no00{}.m5a'.format(scan_no2)
 
@@ -219,7 +231,8 @@ if __name__ == "__main__":
 	
 	dt = t_gp2-t_gp1
 	dts = round(dt.sec,4)
-		
+	
+	gp1=GP_data(fn1,t_gp1)
 	
 
 
