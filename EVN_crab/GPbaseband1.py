@@ -83,131 +83,139 @@ def overlap_freq_specs(fs1,fs2):
 	plt.show()
 	
 class GP_data(object):
-	def __init__(self,fn,t_gp):
-		self.t_gp = t_gp
-		fh = mark5b.open(fn, mode='rs', nchan=16,
-					    sample_rate=sample_rate, thread_ids=thread_ids, ref_mjd=57000)
-		offset_gp = ((t_gp - fh.tell(unit='time')).to(u.s).value *
-					 fh.frames_per_second * fh.samples_per_frame)
-		fh.seek(int(offset_gp) - size // 2)
-		self.d_dispersed = fh.read(size)
-		
-		#start_time = time.time()
-		#print start_time
-		self.process_data()
-		#print time.time()-start_time
-		self.process_output()
-		
-	def process_data(self):
-		ft = np.fft.rfft(self.d_dispersed, axis=0)
-		# Second half of IFs have Fedge at top, need to subtract frequencies, 
-		# and not conjugate coherent phases
-		f = fedge + np.fft.rfftfreq(self.d_dispersed.shape[0], dt1)[:, np.newaxis]
-		f[:,8:] = fedge[8:] - np.fft.rfftfreq(self.d_dispersed.shape[0], dt1)[:, np.newaxis]
-		ft[:,:8] *= dm(f[:,:8], fref, kind='complex').conj()
-		ft[:,8:] *= dm(f[:,8:], fref, kind='complex')
-		self.d_dedispersed = np.fft.irfft(ft, axis=0)
-
-		# Channelize the data
-		self.dchan = np.fft.rfft(self.d_dedispersed.reshape(-1, 2*nchan, 16), axis=1) #axis 1 means across the nchan+1 values in each time bin
-		# Horribly inelegant, but works for now. 
-		# Channels are not in order, and polarizations are separate
-		self.dR = np.concatenate((self.dchan[:,::-1,8], self.dchan[...,0], self.dchan[:,::-1,10], self.dchan[...,2], self.dchan[:,::-1,12], self.dchan[...,4], self.dchan[:,::-1,14], self.dchan[...,6]), axis=1)
-		self.dL = np.concatenate((self.dchan[:,::-1,9], self.dchan[...,1], self.dchan[:,::-1,11], self.dchan[...,3], self.dchan[:,::-1,13], self.dchan[...,5], self.dchan[:,::-1,15], self.dchan[...,7]), axis=1)
-		self.output = (abs(self.dR)**2 + abs(self.dL)**2).T
-		
-	def process_output(self):
-		self.outputsumfreq = self.output.sum(0) #dedispersed
-		#computes signal to noise after summing all the frequencies
-		self.sigs_noise = get_SN(self.outputsumfreq)
-		self.S_N = max(self.sigs_noise)
-		print self.S_N
-		
-		self.background_freq = self.output[:,0:200].mean(1)
-		
-		self.sigma_noise = np.std(self.background_freq)
-		
-		self.peak_time = np.argmax(self.sigs_noise) 
-		
-		self.output_pulse = self.output[:,self.peak_time]
-		   
-		self.freq_spec = self.output_pulse-self.background_freq
+    def __init__(self,fn,t_gp):
+	    self.t_gp = t_gp
+	    fh = mark5b.open(fn, mode='rs', nchan=16,
+				        sample_rate=sample_rate, thread_ids=thread_ids, ref_mjd=57000)
+	    offset_gp = ((t_gp - fh.tell(unit='time')).to(u.s).value *
+				     fh.frames_per_second * fh.samples_per_frame)
+	    fh.seek(int(offset_gp) - size // 2)
+	    self.d_dispersed = fh.read(size)
 	
+	    #start_time = time.time()
+	    #print start_time
+	    self.process_data()
+	    #print time.time()-start_time
+	    self.process_output()
 	
-	def plot_figs(self):
-		#plots the frequency spectrum: 
-		plt.close('all')
-		
-		#plots the dynamic spectrum de-dispersed: 
-		plt.figure()
-		#plt.imshow(self.output, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49))
-		plt.imshow(self.output, aspect='auto')
-		plt.xlabel('time (ms)')
-		plt.ylabel('frequency (MHz)')
-		plt.title('dynamic spectrum of de-dispersed giant pulse around '+self.t_gp.value)
-		plt.colorbar()
-		
-		#plots the signal vs noise of de-dispersed
-		plt.figure() 
-		plt.plot(self.sigs_noise)
-		plt.xlabel('time ($16 \mu s$)')
-		plt.ylabel('S/N')
-		plt.title('Signal to noise of de-dispersed pulse around '+self.t_gp.value)
-		
-		plt.show()
-		#plots the signal vs noise of dispersed - looks like noise, so won't plot
+    def process_data(self):
+	    ft = np.fft.rfft(self.d_dispersed, axis=0)
+	    # Second half of IFs have Fedge at top, need to subtract frequencies, 
+	    # and not conjugate coherent phases
+	    f = fedge + np.fft.rfftfreq(self.d_dispersed.shape[0], dt1)[:, np.newaxis]
+	    f[:,8:] = fedge[8:] - np.fft.rfftfreq(self.d_dispersed.shape[0], dt1)[:, np.newaxis]
+	    ft[:,:8] *= dm(f[:,:8], fref, kind='complex').conj()
+	    ft[:,8:] *= dm(f[:,8:], fref, kind='complex')
+	    self.d_dedispersed = np.fft.irfft(ft, axis=0)
 
-	def plot_fs(self):
-		'''plots the frequency spectrum as a single plot'''
-		f, axarr = plt.subplots(2, 1)
-		axarr[0].plot(self.freq_spec) 
-		axarr[0].set_xlabel('frequency')
-		axarr[0].set_ylabel('Auto correlated frequency spectrum')
-		axarr[1].plot(self.freq_spec)
-		axarr[1].set_ylabel('Peak frequency spectrum')
-		axarr[1].set_xlabel('frequency') 
-		plt.show()
+	    # Channelize the data
+	    self.dchan = np.fft.rfft(self.d_dedispersed.reshape(-1, 2*nchan, 16), axis=1) #axis 1 means across the nchan+1 values in each time bin
+	    # Horribly inelegant, but works for now. 
+	    # Channels are not in order, and polarizations are separate
+	    self.dR = np.concatenate((self.dchan[:,::-1,8], self.dchan[...,0], self.dchan[:,::-1,10], self.dchan[...,2], self.dchan[:,::-1,12], self.dchan[...,4], self.dchan[:,::-1,14], self.dchan[...,6]), axis=1)
+	    self.dL = np.concatenate((self.dchan[:,::-1,9], self.dchan[...,1], self.dchan[:,::-1,11], self.dchan[...,3], self.dchan[:,::-1,13], self.dchan[...,5], self.dchan[:,::-1,15], self.dchan[...,7]), axis=1)
+	    self.output = (abs(self.dR)**2 + abs(self.dL)**2).T
+
+    def process_output(self):
+        self.outputsumfreq = self.output.sum(0) #dedispersed
+        #computes signal to noise after summing all the frequencies
+        self.sigs_noise = get_SN(self.outputsumfreq)
+        self.S_N = max(self.sigs_noise)
+        print self.S_N
+
+        self.peak_time = np.argmax(self.sigs_noise)
+        
+        self.background_freq = self.output[:,self.peak_time-300:self.peak_time-100].mean(1)
+        
+        self.sigma_noise = np.std(self.background_freq)
+
+        self.output_pulse = self.output[:,self.peak_time]
+
+        self.freq_spec = self.output_pulse-self.background_freq
+
+
+    def plot_figs(self):
+        #plots the frequency spectrum: 
+        plt.close('all')
+
+        #plots the dynamic spectrum de-dispersed: 
+        plt.figure()
+        #plt.imshow(self.output, aspect='auto',extent=(-8*8192/1000,8*8192/1000,1610.49+16*8,1610.49))
+        plt.imshow(self.output, aspect='auto')
+        plt.xlabel('time (ms)')
+        plt.ylabel('frequency (MHz)')
+        plt.title('dynamic spectrum of de-dispersed giant pulse around '+self.t_gp.value)
+        plt.colorbar()
+
+        #plots the signal vs noise of de-dispersed
+        plt.figure() 
+        plt.plot(self.sigs_noise)
+        plt.xlabel('time ($16 \mu s$)')
+        plt.ylabel('S/N')
+        plt.title('Signal to noise of de-dispersed pulse around '+self.t_gp.value)
+
+        plt.show()
+        #plots the signal vs noise of dispersed - looks like noise, so won't plot
+
+    def plot_fs(self):
+	    '''plots the frequency spectrum as a single plot'''
+	    f, axarr = plt.subplots(2, 1)
+	    axarr[0].plot(self.freq_spec) 
+	    axarr[0].set_xlabel('frequency')
+	    axarr[0].set_ylabel('Auto correlated frequency spectrum')
+	    axarr[1].plot(self.freq_spec)
+	    axarr[1].set_ylabel('Peak frequency spectrum')
+	    axarr[1].set_xlabel('frequency') 
+	    plt.show()
+
+
+'''functions outside the class'''
+def process_freq_spec(gp1,draw=1):
+    '''function takes a continuous frequency spectrum and cuts it into 8 bands, divide by the giant pulse mean, and normalize it by itself gp1=freq_spec[i]. function also plots the frequency spectrum'''
+    gp1_8=np.zeros(shape=(0,425))
+    gp1_8_divided=np.zeros(shape=(0,425))
+    for j in range(8):gp1_8=np.append(gp1_8,np.array([gp1[j*513+40:j*513+465]]),0)
+    gp1_8_divided=gp1_8/gpab #Dividing by giant pulse average
+    for i in range(8):
+        gp1_8[i]=gp1_8[i]/gp1_8[i].mean()-1.
+        gp1_8_divided[i] = gp1_8_divided[i]/gp1_8_divided[i].mean()-1
+    if draw==1:
+        f,axarr=plt.subplots(8,1,figsize=(10,15))
+
+        for i in range(8):axarr[i].plot(gp1_8[i])
+        axarr[0].set_title('Frequency spectrum of background noise')
+    return gp1_8_divided , gp1_8
+
+def transform_to_timelag(fgp,draw =1):
+    tgp=np.zeros(shape=(0,213))
+    for i in range(8):tgp=np.append(tgp,np.array([np.fft.rfft(fgp[i])]),0)
+    if draw ==1:
+        f,axarr=plt.subplots(8,1,figsize=(10,15))
+        for i in range(8):axarr[i].plot(np.linspace(0,16,213),abs(tgp[i]))
+        axarr[0].set_title('Time lag spectrum of background noise')
+        axarr[7].set_xlabel('Time lag(\mu s)')
+    return tgp
+
+def find_std(tgp,draw = 1):
+    stda=np.std(tgp,axis=0)
+    return stda
+    if draw == 1:
+        figure(figsize=(10,6))
+        plot(np.linspace(0,16,213),stda)
+        title('Standard deviation as a function of time lag')
+        xlabel('Time lag (\mu s)')
+	
 if __name__ == "__main__":	
-	def overlap_freq_spec(fs1,fs2,normalized = True,lg = ['Main pulse1','Main pulse2'],pairkind='MP2'):
-		freq1 = np.append(fs1[0],fs1[1])
-		freq2 = np.append(fs2[0],fs2[1])
-		for i in range(6):
-			freq1 = np.append(freq1,fs1[i+2])
-			freq2 = np.append(freq2,fs2[i+2])
-		a = plt.figure(figsize = (21,7))
-		if normalized:
-			plt.plot(freq1/freq1.mean()-1,label = lg[0])
-			plt.plot(freq2/freq2.mean()-1,label = lg[1])
-		else:
-			plt.plot(freq1,label = 'Interpulse')
-			plt.plot(freq2,label = 'Main pulse')
-			plt.axhline(fs1[i].mean(),color = 'blue')
-			plt.axhline(fs2[i].mean(),color = 'green')
 	
-		plt.axhline(0,color = 'black')
-		#plt.xlim(1610.49+16.0/33*2,1610.49+16*8-16.0/33*2)
-		plt.xlabel('frequency channel')
-		plt.ylabel('Intensity')
-		plt.title('Frequency spectrum of giant pulses (c ={},dt = {}s) with phases {},{}\n '.format(round(c[0],4),dts,round(float(phase1),4),round(float(phase2),4)))
-		plt.legend()
-		plt.savefig('./figures/current day plots/{}chan{}_{}s.png'.format(nchan,pairkind,dts))
-		plt.show()
+	i = 37
+	j = 35
 	
-	i = 6
-	j = 7
+	gpab=np.load('./figures/correlation_coeff/gpa_smoothed.npy')
 	
-	gp_average = np.load('./figures/correlation_coeff/giant_pulses_average{}chan.npz'.format(nchan))
 	with np.load('./figures/correlation_coeff/giant_pulses{}chan.npz'.format(nchan)) as npzfile:
 		freq_values = npzfile['freq_values']
 		time_values = npzfile['time_values']
 		noise_sigma_values = npzfile['noise_sigma_values']
-
-	def correlate(i,j):
-		'''My function to find the correlation coefficient, to test np.corrcoef. results are the same.'''
-		fs1 = freq_values[i]/gp_average-1
-		fs2 = freq_values[j]/gp_average-1
-		numerator = np.fft.rfft(fs1)*np.fft.rfft(fs2)
-		#denominator = 
 	
 	text_name = 'all7_sorted1.txt'	
 	with open(text_name, 'r') as f:
@@ -233,7 +241,12 @@ if __name__ == "__main__":
 	dts = round(dt.sec,4)
 	
 	gp1=GP_data(fn1,t_gp1)
+	#bg = gp1.background_freq
 	
-
+	#fbgd,fbg=process_freq_spec(bg)
+	#tbg=transform_to_timelag(fbgd,draw = 0)
+	#tbgstd=find_std(tbg,draw = 0)
+	#print tbgstd.shape
+	#np.save('./figures/correlation_coeff/backgroundstd.npy',tbgstd)
 
 
